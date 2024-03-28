@@ -73,18 +73,56 @@ class TranslationDataset(Dataset):
         return len(self.ge_sentences)
 
     def __getitem__(self, idx):
-        ge_sentence = self.ge_sentences[idx]
-        en_sentence = self.en_sentences[idx]
+        while True:
+            # Check if the index is within the range of the dataset
+            if idx >= len(self.ge_sentences):
+                raise IndexError("Index out of range")
 
-        # Tokenize sentences using SentencePiece model
-        ge_tokens = self.sp_model.EncodeAsPieces(ge_sentence)
-        en_tokens = self.sp_model.EncodeAsPieces(en_sentence)
+            ge_sentence = self.ge_sentences[idx]
+            en_sentence = self.en_sentences[idx]
 
-        # Convert tokens to tensors
-        ge_tensor = torch.tensor(ge_tokens, dtype=torch.long)  # Convert to tensor
-        en_tensor = torch.tensor(en_tokens, dtype=torch.long)  # Convert to tensor
+            # Tokenize sentences using SentencePiece model
+            ge_tokens = self.sp_model.EncodeAsPieces(ge_sentence)
+            en_tokens = self.sp_model.EncodeAsPieces(en_sentence)
 
-        return ge_tensor, en_tensor
+            # Check if tokens are empty
+            if not ge_tokens or not en_tokens:
+                print("Empty tokens found at index {}. Skipping this sentence.".format(idx))
+                idx += 1
+                continue
+
+            # Convert tokens to indices using SentencePiece model
+            ge_indices = self.sp_model.EncodeAsIds(ge_tokens)
+            en_indices = self.sp_model.EncodeAsIds(en_tokens)
+
+            # Check if indices are empty
+            if not ge_indices or not en_indices:
+                print("Empty indices found at index {}. Skipping this sentence.".format(idx))
+                idx += 1
+                continue
+
+            # Convert indices to tensors
+            ge_tensor = torch.tensor(ge_indices, dtype=torch.long)  # Convert to tensor
+            en_tensor = torch.tensor(en_indices, dtype=torch.long)  # Convert to tensor
+
+            # Print debug information
+            print("Georgian tokens:", ge_tokens)
+            print("English tokens:", en_tokens)
+            print("Georgian indices:", ge_indices)
+            print("English indices:", en_indices)
+
+            return ge_tensor, en_tensor
+
+
+
+
+
+def custom_collate_fn(batch):
+    # Filter out None values from the batch
+    batch = [data for data in batch if data is not None]
+    
+    # Use the default collate function to collate the filtered batch
+    return torch.utils.data.dataloader.default_collate(batch)
 
 
 def load_sp_model(model_path):
@@ -92,8 +130,6 @@ def load_sp_model(model_path):
     sp_model = spm.SentencePieceProcessor()
     sp_model.Load(model_path)
     return sp_model
-
-# Add the following lines after the TranslationDataset class definition:
 
 # Define SentencePiece model path and load the model
 sp_model_path = 'data/ge_en.model'
@@ -118,7 +154,8 @@ num_epochs = 10
 
 # Instantiate your dataset and dataloader
 # dataset = TranslationDataset('data/ge_tokenized.txt', 'data/en_tokenized.txt')
-dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, collate_fn=custom_collate_fn)
+
 
 # Instantiate encoder and decoder
 encoder = Encoder(input_dim, emb_dim, hid_dim, n_layers, dropout)
