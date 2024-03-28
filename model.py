@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import sentencepiece as spm
 from torch.utils.data import Dataset, DataLoader
 import random
 
@@ -57,6 +58,7 @@ class Seq2Seq(nn.Module):
             input = trg[t] if teacher_force else top1
         return outputs
 
+
 class TranslationDataset(Dataset):
     def __init__(self, ge_file, en_file, sp_model):
         # Load tokenized data from files
@@ -79,10 +81,27 @@ class TranslationDataset(Dataset):
         en_tokens = self.sp_model.EncodeAsPieces(en_sentence)
 
         # Convert tokens to tensors
-        ge_tensor = torch.tensor(ge_tokens)  # Convert to tensor
-        en_tensor = torch.tensor(en_tokens)  # Convert to tensor
+        ge_tensor = torch.tensor(ge_tokens, dtype=torch.long)  # Convert to tensor
+        en_tensor = torch.tensor(en_tokens, dtype=torch.long)  # Convert to tensor
 
         return ge_tensor, en_tensor
+
+
+def load_sp_model(model_path):
+    """Load the trained SentencePiece model."""
+    sp_model = spm.SentencePieceProcessor()
+    sp_model.Load(model_path)
+    return sp_model
+
+# Add the following lines after the TranslationDataset class definition:
+
+# Define SentencePiece model path and load the model
+sp_model_path = 'data/ge_en.model'
+sp_model = load_sp_model(sp_model_path)
+
+# Instantiate the TranslationDataset
+dataset = TranslationDataset('data/ge_tokenized.txt', 'data/en_tokenized.txt', sp_model)
+
 
 
 # Define hyperparameters and other configurations
@@ -98,7 +117,7 @@ batch_size = 64
 num_epochs = 10
 
 # Instantiate your dataset and dataloader
-dataset = TranslationDataset('data/ge_tokenized.txt', 'data/en_tokenized.txt')
+# dataset = TranslationDataset('data/ge_tokenized.txt', 'data/en_tokenized.txt')
 dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
 # Instantiate encoder and decoder
