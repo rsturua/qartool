@@ -26,9 +26,9 @@ def load_external_vocab(file_path):
     return vocab
 
 def preprocess_data(data_dir='data'):
-    # Define file paths
+    
     all_sentences_file = os.path.join(data_dir, 'all_sentences.txt')
-    # ge_en_vocab_file = os.path.join(data_dir, 'ge_en_vocab.json')
+    ge_en_vocab_file = os.path.join(data_dir, 'ka.json')
     sp_model_prefix = os.path.join(data_dir, 'ge_en')
     sp_model_file = sp_model_prefix + '.model'
 
@@ -41,7 +41,26 @@ def preprocess_data(data_dir='data'):
     sp_model = load_sp_model(sp_model_file)
     
     # Load the external Georgian-English vocabulary
-    # ge_en_vocab = load_external_vocab(ge_en_vocab_file)
+    ge_en_vocab = load_external_vocab(ge_en_vocab_file)
+
+# Tokenize and save the data
+    with open(all_sentences_file, 'r', encoding='utf-8') as file:
+        georgian_sentences = []
+        english_sentences = []
+        for line in file:
+            georgian_tokens = sp_tokenize(sp_model, line.strip())
+            english_tokens = line.strip().split()  # Assuming English sentences are whitespace tokenized
+            georgian_sentences.append(' '.join(georgian_tokens) + '\n')
+            english_sentences.append(' '.join(english_tokens) + '\n')
+
+    # Save tokenized data into separate files
+    with open(os.path.join(data_dir, 'ge_tokenized.txt'), 'w', encoding='utf-8') as f:
+        f.writelines(georgian_sentences)
+
+    with open(os.path.join(data_dir, 'en_tokenized.txt'), 'w', encoding='utf-8') as f:
+        f.writelines(english_sentences)
+
+
 
     # Example usage: Tokenize the first few sentences from all_sentences.txt
     with open(all_sentences_file, 'r', encoding='utf-8') as file:
