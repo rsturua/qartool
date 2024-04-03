@@ -1,74 +1,63 @@
 import os
-import json
 import sentencepiece as spm
 
-def train_sentencepiece_model(input_file, model_prefix, vocab_size=866):
-    """Train a SentencePiece model."""
-    spm.SentencePieceTrainer.Train(
-        f'--input={input_file} --model_prefix={model_prefix} '
-        f'--vocab_size={vocab_size} --character_coverage=1.0 --model_type=bpe'
-    )
-
-def load_sp_model(model_path):
-    """Load the trained SentencePiece model."""
-    sp_model = spm.SentencePieceProcessor()
-    sp_model.Load(model_path)
-    return sp_model
-
-def sp_tokenize(sp_model, text):
-    """Tokenizes input text using the loaded SentencePiece model."""
-    return sp_model.EncodeAsPieces(text)
-
-def load_external_vocab(file_path):
-    """Loads an external vocabulary file."""
-    with open(file_path, 'r', encoding='utf-8') as file:
-        vocab = json.load(file)
-    return vocab
-
-def preprocess_data(data_dir='data'):
+def train_sentencepiece_model(data_dir='data', ka_file='ka_untokenized.txt', en_file='en_untokenized.txt', model_dir='model1', vocab_size=143):
+    # Path for the combined training file
+    combined_file_path = os.path.join(data_dir, 'combined_ka_en.txt')
     
-    all_sentences_file = os.path.join(data_dir, 'all_sentences.txt')
-    ge_en_vocab_file = os.path.join(data_dir, 'ka.json')
-    sp_model_prefix = os.path.join(data_dir, 'ge_en')
-    sp_model_file = sp_model_prefix + '.model'
+    # Read Georgian and English files into lists
+    with open(os.path.join(data_dir, ka_file), 'r', encoding='utf-8') as ka_f:
+        ka_lines = ka_f.readlines()
+    with open(os.path.join(data_dir, en_file), 'r', encoding='utf-8') as en_f:
+        en_lines = en_f.readlines()
 
-    # Train SentencePiece model if it doesn't exist
-    if not os.path.exists(sp_model_file):
-        print("Training SentencePiece model...")
-        train_sentencepiece_model(all_sentences_file, sp_model_prefix)
+    # Combine Georgian and English sentences into one for training
+    with open(combined_file_path, 'w', encoding='utf-8') as combined_f:
+        for ka_line, en_line in zip(ka_lines, en_lines):
+            combined_f.write(ka_line.strip() + '\n' + en_line.strip() + '\n')
     
-    # Load the trained SentencePiece model
-    sp_model = load_sp_model(sp_model_file)
-    
-    # Load the external Georgian-English vocabulary
-    ge_en_vocab = load_external_vocab(ge_en_vocab_file)
+    # Train SentencePiece model
+    model_prefix = os.path.join(model_dir, 'ka_en')
+    spm.SentencePieceTrainer.train(input=combined_file_path, model_prefix=model_prefix, vocab_size=vocab_size, model_type='unigram')
+    print("SentencePiece model training complete.")
 
-# Tokenize and save the data
-    with open(all_sentences_file, 'r', encoding='utf-8') as file:
-        georgian_sentences = []
-        english_sentences = []
-        for line in file:
-            georgian_tokens = sp_tokenize(sp_model, line.strip())
-            english_tokens = line.strip().split()  # Assuming English sentences are whitespace tokenized
-            georgian_sentences.append(' '.join(georgian_tokens) + '\n')
-            english_sentences.append(' '.join(english_tokens) + '\n')
+def tokenize_georgian_word(word):
+    suffixes = ['ის', 'ით', 'ად', 'მა', 'ი', 'მ', 'ს', 'ო', 'ვ']
+    suffix_pattern = re.compile('(?:' + '|'.join(suffixes) + ')$')
+    match = suffix_pattern.search(word)
+    if match:
+        suffix = match.group(0)
+        root = word[:-len(suffix)]
+    else:
+        root = word
+        suffix = ''
+    return root, suffix
 
-    # Save tokenized data into separate files
-    with open(os.path.join(data_dir, 'ge_tokenized.txt'), 'w', encoding='utf-8') as f:
-        f.writelines(georgian_sentences)
+def tokenize_text_files(data_dir='data', model_dir='model1', ka_file='ka_untokenized.txt', en_file='en_untokenized.txt'):
+    sp = spm.SentencePieceProcessor()
+    sp.load(os.path.join(model_dir, 'ka_en.model'))
 
-    with open(os.path.join(data_dir, 'en_tokenized.txt'), 'w', encoding='utf-8') as f:
-        f.writelines(english_sentences)
-
-
-
-    # Example usage: Tokenize the first few sentences from all_sentences.txt
-    with open(all_sentences_file, 'r', encoding='utf-8') as file:
-        for i, line in enumerate(file):
-            if i >= 5:  # Limit to first 5 sentences for demonstration
-                break
-            tokens = sp_tokenize(sp_model, line.strip())
-            print(f"Original: {line.strip()}\nTokenized: {tokens}\n")
+    # Tokenization for Georgian text
+    ka_input_path = os.path.join(data_dir, ka_file)
+    ka_output_path = ka_input_path.replace('untokenized', 'tokenized')
+    with open(ka_input_path, 'r', encoding='utf-8') as in_f, \
+         open(ka_output_path, 'w', encoding='utf-8') as out_f:
+        for line in in_f:
+            tokenized_line = []
+            for word in line.strip().split():
+                root, suffix = tokenize_georgian_word(word)
+                # Optionally apply SentencePiece tokenization on root here
+                tokenized_line.append(root + (f" -{suffix}" if suffix else ""))
+            out_f.write(' '.join(tokenized_line) + '\n')
+    print(f"Tokenization complete for {ka_file}. Output saved to {ka_output_path}.")
 
 if __name__ == '__main__':
-    preprocess_data()
+    data_directory = 'data'
+    model_directory = 'model1'
+    georgian_file = 'ka_untokenized.txt'
+    english_file = 'en_untokenized.txt'
+    
+    os.makedirs(model_directory, exist_ok=True)
+    
+    train_sentencepiece_model(data_dir=data_directory, ka_file=georgian_file, en_file=english_file, model_dir=model_directory)
+    tokenize_text_files(data_dir=data_directory, model_dir=model_directory, ka_file=georgian_file, en_file=english_file)
