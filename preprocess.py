@@ -1,5 +1,6 @@
 import os
 import sentencepiece as spm
+import re
 
 def train_sentencepiece_model(data_dir='data', ka_file='ka_untokenized.txt', en_file='en_untokenized.txt', model_dir='model1', vocab_size=143):
     # Path for the combined training file
@@ -22,16 +23,33 @@ def train_sentencepiece_model(data_dir='data', ka_file='ka_untokenized.txt', en_
     print("SentencePiece model training complete.")
 
 def tokenize_georgian_word(word):
+    # Define suffixes and prefixes
     suffixes = ['ის', 'ით', 'ად', 'მა', 'ი', 'მ', 'ს', 'ო', 'ვ']
+    prefixes = ['გადმო', 'გადა', 'შემო']
+
+    # Compile regex patterns for suffixes and prefixes
     suffix_pattern = re.compile('(?:' + '|'.join(suffixes) + ')$')
-    match = suffix_pattern.search(word)
-    if match:
-        suffix = match.group(0)
-        root = word[:-len(suffix)]
-    else:
-        root = word
-        suffix = ''
-    return root, suffix
+    prefix_pattern = re.compile('^(?:' + '|'.join(prefixes) + ')')
+
+    # Attempt to find a suffix and prefix match
+    suffix_match = suffix_pattern.search(word)
+    prefix_match = prefix_pattern.search(word)
+
+    # Initialize root, prefix, and suffix
+    root = word
+    prefix = ''
+    suffix = ''
+
+    # Remove matched prefix and suffix to isolate the root
+    if prefix_match:
+        prefix = prefix_match.group(0)
+        root = root[len(prefix):]
+
+    if suffix_match:
+        suffix = suffix_match.group(0)
+        root = root[:-len(suffix)]
+
+    return prefix, root, suffix
 
 def tokenize_text_files(data_dir='data', model_dir='model1', ka_file='ka_untokenized.txt', en_file='en_untokenized.txt'):
     sp = spm.SentencePieceProcessor()
@@ -45,9 +63,10 @@ def tokenize_text_files(data_dir='data', model_dir='model1', ka_file='ka_untoken
         for line in in_f:
             tokenized_line = []
             for word in line.strip().split():
-                root, suffix = tokenize_georgian_word(word)
-                # Optionally apply SentencePiece tokenization on root here
-                tokenized_line.append(root + (f" -{suffix}" if suffix else ""))
+                prefix, root, suffix = tokenize_georgian_word(word)
+                # Combine prefix, root, and suffix
+                tokenized_word = (prefix + " -" if prefix else "") + root + (" -" + suffix if suffix else "")
+                tokenized_line.append(tokenized_word)
             out_f.write(' '.join(tokenized_line) + '\n')
     print(f"Tokenization complete for {ka_file}. Output saved to {ka_output_path}.")
 
